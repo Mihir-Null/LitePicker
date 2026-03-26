@@ -1,0 +1,16 @@
+[Unit]
+Description=litepicker LiteLLM wrapper
+After=network.target litellm.service
+Wants=litellm.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/litepicker
+EnvironmentFile=%h/litepicker/.env
+ExecStart=%h/miniconda3/envs/openclaw/bin/uvicorn main:app \
+    --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
