@@ -8,12 +8,12 @@ from config import settings
 # heartbeat and local tiers exist here for completeness; v1 classify() never
 # returns them — reserved for future heartbeat detection and explicit local routing.
 TIER_TO_MODEL: dict[str, str] = {
-    "heartbeat": "ollama-default",
-    "simple":    "deepseek-local",
-    "medium":    "haiku-4-5",
-    "complex":   "sonnet-4-6",
-    "reasoning": "sonnet-reasoning",
-    "local":     "r1-local",
+    "heartbeat": "heart-model",
+    "simple":    "simple-model",
+    "medium":    "medium-model",
+    "complex":   "complex-model",
+    "reasoning": "reasoning-model",
+    "local":     "local-model",
 }
 
 # ── Dimension weights ───────────────────────────────────────────────────────
