@@ -3,7 +3,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse
 
 from classifier import classify
@@ -36,13 +36,19 @@ async def proxy_completions(request: Request):
     tools = body.get("tools")       # top-level body field — NOT on any message object
     request_id = str(uuid.uuid4())
 
-    # 1. Classify — pure Python, synchronous, no network hop, <1ms
+    # 1. Verify caller is nanobot
+    auth = request.headers.get("authorization", "")
+    expected = f"Bearer {settings.litepicker_api_key}"
+    if auth != expected:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    # 2. Classify — pure Python, synchronous, no network hop, <1ms
     tier, model_alias, confidence = classify(messages, tools)
 
-    # 2. Rewrite model field — this is the entire point of litepicker
+    # 3. Rewrite model field — this is the entire point of litepicker
     body["model"] = model_alias
 
-    # 3. Extract preview from last user message for classification log
+    # 4. Extract preview from last user message for classification log
     preview = ""
     for msg in reversed(messages):
         if msg.get("role") == "user":
@@ -54,7 +60,7 @@ async def proxy_completions(request: Request):
             preview = content
             break
 
-    # 4. Fire-and-forget classification log — never blocks the proxy response.
+    # 5. Fire-and-forget classification log — never blocks the proxy response.
     #    _bg_tasks holds a strong ref until the task completes, preventing GC cancellation.
     task = asyncio.create_task(
         log_classification(
@@ -69,20 +75,19 @@ async def proxy_completions(request: Request):
     _bg_tasks.add(task)
     task.add_done_callback(_bg_tasks.discard)
 
-    # 5. Build forward headers
+    # 6. Build forward headers
     forward_headers = {
         "Content-Type": "application/json",
+        "Authorization": f"Bearer {settings.litellm_master_key}",
         "X-Request-ID": request_id,
         "X-Litepicker-Tier": tier,
         "X-Litepicker-Confidence": str(round(confidence, 3)),
     }
-    if auth := request.headers.get("authorization"):
-        forward_headers["Authorization"] = auth
 
     client: httpx.AsyncClient = request.app.state.http
     litellm_url = f"{settings.litellm_url}/v1/chat/completions"
 
-    # 6. Forward to LiteLLM
+    # 7. Forward to LiteLLM
     if body.get("stream", False):
         async def stream_gen():
             async with client.stream("POST", litellm_url, json=body, headers=forward_headers) as resp:
